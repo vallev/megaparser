@@ -1,0 +1,29 @@
+{
+    "name": "vallev/megaparser",
+    "description": "PHP web scraping framework",
+    "require": {
+        "guzzlehttp/guzzle": "6.2",
+        "electrolinux/phpquery": "*",
+        "andre_487/php_rutils": "*"
+    },
+    "authors": [
+        {
+            "name": "Vladimir Akparov",
+            "email": "akparov@gmail.com"
+        }
+    ],
+    "minimum-stability": "dev",
+
+    "dist": {
+        "url": "https://github.com/vallev/megaparser.git",
+        "type": "git"
+    },
+    "autoload": {
+        "psr-4": {
+            "parserbot\\megaparser\\": "src/"
+        },
+        "classmap": [
+            "tests"
+        ]
+    }
+}
