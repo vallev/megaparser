@@ -1,11 +1,5 @@
-# Фреймворк для парсинга #
+# Web scrapping framework #
 
-Данный фреймворк позволяет быстро создавать всевозможные парсеры.
-
-### Как работает фреймворк? ###
-
-* Задания (Task)
-* Класс парсера (MegaParser)
-* Функции процессинга (process...)
+Helps to build many various web scrappers and parsers.
 
 
