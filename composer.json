@@ -2,9 +2,7 @@
     "name": "vallev/megaparser",
     "description": "PHP web scraping framework",
     "require": {
-        "guzzlehttp/guzzle": "6.2",
-        "electrolinux/phpquery": "*",
-        "andre_487/php_rutils": "*"
+        "guzzlehttp/guzzle": "6.0.2"
     },
     "authors": [
         {
