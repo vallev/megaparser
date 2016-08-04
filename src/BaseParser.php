@@ -111,8 +111,11 @@ class BaseParser
         }
 
         $this->cookies = new CookieJar();
-        $this->headers = ['User-Agent'=>'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:37.0) Gecko/20100101 Firefox/37.0', 'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', 'Accept-Language'=>'
-ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3'];
+        $this->headers = [
+            'User-Agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:37.0) Gecko/20100101 Firefox/37.0',
+            'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language' => 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3',
+        ];
 
         $stack = HandlerStack::create();
         $stack->push($this->forceUtf8());
@@ -590,12 +593,12 @@ ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3'];
             'method'    => 'post',
             'key'       => $apikey,
             'file'      => $file,
-            'phrase'	=> $is_phrase,
-            'regsense'	=> $is_regsense,
-            'numeric'	=> $is_numeric,
-            'min_len'	=> $min_len,
-            'max_len'	=> $max_len,
-            'language'	=> $language
+            'phrase'    => $is_phrase,
+            'regsense'  => $is_regsense,
+            'numeric'   => $is_numeric,
+            'min_len'   => $min_len,
+            'max_len'   => $max_len,
+            'language'  => $language
         );
 
         $ch = curl_init();
