@@ -10,12 +10,6 @@
             "email": "akparov@gmail.com"
         }
     ],
-    "minimum-stability": "dev",
-
-    "dist": {
-        "url": "https://github.com/vallev/megaparser.git",
-        "type": "git"
-    },
     "autoload": {
         "psr-4": {
             "parserbot\\megaparser\\": "src/"
