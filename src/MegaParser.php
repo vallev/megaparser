@@ -29,6 +29,22 @@ class MegaParser extends BaseParser{
         return null;
     }
 
+    /*
+     * Проверка массива заданий на то, что есть незавершенные задания
+     *
+     * @param array         $tasks
+     *
+     */
+    private function hasTasks($tasks)
+    {
+        foreach ($tasks as $task) {
+            if (!$task->isCompleted()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /*
      * Основной цикл работы парсера
@@ -37,14 +53,12 @@ class MegaParser extends BaseParser{
     private function loop()
     {
 
-        $max = $this->concurrency;
+        $max = $this->max;
         $tasks = [];
         $i = 0;
-
-        $generator = new GeneratorIterator();
-        $generator->append($this->taskGenerator());
-
-        while($generator->valid()) {
+        $generator = $this->taskGenerator();
+        $generator->rewind();
+        while(true) {
             $task = $generator->current();
 
             if ($task) {
@@ -54,12 +68,21 @@ class MegaParser extends BaseParser{
                 $tasks[] = $task;
             }
 
-            $generator->next();
-            if ((($i % $max === ($max-1)) || !$task || !$generator->valid()) && count($tasks)) {
-                $generator->prepend($this->process($tasks));
+            if ((($i % $max === ($max-1)) || !$task) && count($tasks)) {
+                while(true) {
+                    $tasks = $this->process($tasks);
+                    if (!$this->hasTasks($tasks)) {
+                        break;
+                    }
+                }
+            }
+            $i++;
+
+            if (!$task) {
+                break;
             }
 
-            $i++;
+            $generator->next();
 
         }
 
@@ -77,6 +100,7 @@ class MegaParser extends BaseParser{
 
         $this->addMessage(count($tasks), 'level7');
         //Не нужно загружать сразу все задачи, нужно делить их на части -
+        $return_tasks = [];
         $concurrency_groups = self::splitTasks($tasks);
 
         // Нужно отсортировать задачи по конкурентности
@@ -102,80 +126,43 @@ class MegaParser extends BaseParser{
                 // Получили - теперь нужно обработать
                 // проходим по каждому заданию и обрабатываем
                 // полученные в результате обработки задания складываем в return_tasks
-                foreach($downloaded_tasks as $k=>$task) {
-                    if (!isset($task->completed)) {
-                        unset($downloaded_tasks[$k]);
-                        continue;
-                    }
-                    if ($task->isCompleted() && !$task->getFailed()) {
+                foreach($downloaded_tasks as $task) {
+                    if ($task->isCompleted()) {
+                        //$return_tasks[] = $task;
                         //Не храним задания
                     } else {
-                        if ($task->getFailed()) {
-                            $task->complete();
-
-                            if ($task->getFailback()) {
-                                $method = new \ReflectionMethod(get_class($this), 'process' . $task->getFailback());
-                                if ($method->isGenerator()) {
-                                    foreach ($this->{'process' . $task->getFailback()}($task) as $return_task) {
-
-                                        $this->counterInc();
-                                        yield $return_task;
-                                    }
-                                } else {
-                                    $processed = $this->{'process' . $task->getFailback()}($task);
-                                    if (is_array($processed)) {
-                                        foreach ($processed as $return_task) {
-                                            $this->counterInc();
-                                            yield $return_task;
-                                        }
-                                    }
-                                }
+                        //
+                        $task->complete();
+                        $method = new \ReflectionMethod(get_class($this), 'process'.$task->getCallback());
+                        if ($method->isGenerator()) {
+                            foreach ($this->{'process'.$task->getCallback()}($task) as $return_task) {
+                                $return_tasks[] = $return_task;
                             }
-
-                            // Принудительно удалим всю информацию о задаче
-                            $task->destroy();
-                            unset($task);
                         } else {
-
-                            $task->complete();
-                            $method = new \ReflectionMethod(get_class($this), 'process' . $task->getCallback());
-                            if ($method->isGenerator()) {
-                                foreach ($this->{'process' . $task->getCallback()}($task) as $return_task) {
-                                    $this->counterInc();
-                                    yield $return_task;
-                                }
-                            } else {
-                                $processed = $this->{'process' . $task->getCallback()}($task);
-                                if (is_array($processed)) {
-                                    foreach ($processed as $return_task) {
-                                        $this->counterInc();
-                                        yield $return_task;
-                                    }
-                                }
+                            $processed = $this->{'process'.$task->getCallback()}($task);
+                            if (is_array($processed)) {
+                                $return_tasks = array_merge($processed, $return_tasks);
                             }
-
-                            // Принудительно удалим всю информацию о задаче
-                            $task->destroy();
-                            unset($task);
-
                         }
+
+                        // Принудительно удалим всю информацию о задаче
+                        $task->destroy();
+                        unset($task);
                     }
                 }
 
+                $this->counter += count($return_tasks);
+                if ($this->counter > $this->concurrency) {
+                    sleep($this->delay);
+                    $this->counter = 0;
+                }
             }
-        }
-    }
 
-    private function counterInc($inc = 1)
-    {
-        $this->counter += $inc;
-
-        if ($this->counter > $this->concurrency) {
-            sleep($this->delay);
-            $this->counter = 0;
         }
 
+        return $return_tasks;
     }
+
 
     /*
      * Запуск парсера

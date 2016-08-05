@@ -25,12 +25,8 @@ class Task {
     public $effective_url = '';
     public $base_url = false;
     public $options = [];
-    public $failback;
 
-    const GET = "GET";
-    const POST = "POST";
-
-    public function __construct($url, $method = self::GET, $options = [])
+    public function __construct($url, $method = 'GET', $options = [])
     {
         $this->method = $method;
         $this->options = $options;
@@ -54,7 +50,6 @@ class Task {
         $this->proxy = isset($options['proxy'])?$options['proxy']:'';
         $this->headers = isset($options['headers'])?$options['headers']:[];
         $this->callback = isset($options['callback'])?$options['callback']:false;
-        $this->failback = isset($options['failback'])?$options['failback']:false;
         $this->params = isset($options['params'])?$options['params']:[];
         $this->concurrency = isset($options['concurrency'])?$options['concurrency']:false;
         $this->custom = isset($options['custom'])?$options['custom']:[];
@@ -123,16 +118,6 @@ class Task {
     public function setCallback($callback)
     {
         $this->callback = $callback;
-    }
-
-    public function getFailback()
-    {
-        return $this->failback;
-    }
-
-    public function setFailback($failback)
-    {
-        $this->failback = $failback;
     }
 
     public function setHtml($html)
@@ -248,11 +233,6 @@ class Task {
     {
         $this->completed = true;
         $this->failed = true;
-    }
-
-    public function getFailed()
-    {
-        return $this->failed;
     }
 
     public function getParams()
