@@ -27,7 +27,6 @@ class BaseParser
     public $proxer;
     public $interrupter;
     public $messenger;
-    private $effectiveYrlMiddleware;
 
     public function __construct(array $options = [])
     {
@@ -121,9 +120,6 @@ class BaseParser
         $stack = HandlerStack::create();
         $stack->push($this->forceUtf8());
 
-        $this->effectiveYrlMiddleware = new EffectiveUrlMiddleware();
-        $stack->push(\GuzzleHttp\Middleware::mapRequest($this->effectiveYrlMiddleware));
-
         $this->client = new Client(['headers'=>$this->headers, 'proxy'=>$proxy,
             'cookies'=>$this->cookies, 'handler'=>$stack]);
         $config = $this->client->getConfig();
@@ -138,8 +134,6 @@ class BaseParser
         }
 
         $stack = HandlerStack::create();
-        $this->effectiveYrlMiddleware = new EffectiveUrlMiddleware();
-        $stack->push(\GuzzleHttp\Middleware::mapRequest($this->effectiveYrlMiddleware));
         $config['handler'] = $stack;
 
         $this->client = new Client($config);
@@ -387,11 +381,12 @@ class BaseParser
     {
         $chunks = [];
         foreach ($tasks as $task) {
-            $chunks[(int)$task->getConcurrency()][] = $task;
+            if (isset($task->concurrency)) {
+                $chunks[(int)$task->getConcurrency()][] = $task;
+            }
         }
         return $chunks;
     }
-
 
     public function downloadHtmls($tasks, $concurrency = 5, $num_retries = 3, $delay = 1)
     {
@@ -427,6 +422,10 @@ class BaseParser
     public function downloadHtmlsRaw($tasks, $concurrency = 5, $num_retries = 3, $delay = 0)
     {
 
+        if (!$concurrency) {
+            $concurrency = 1;
+        }
+
         $retry_tasks = $this->resetTasks($tasks);
         //Загружаем все начальные страницы для данных pcodes
         //Загружаем параллельно с помощью Guzzle Pool
@@ -448,7 +447,7 @@ class BaseParser
                         $proxy = $proxy->proxy;
                     }
 
-                    if ($method === 'GET') {
+                    if ($method === Task::GET) {
 
                         //$client = new Client();
 
@@ -461,6 +460,9 @@ class BaseParser
                             'curl' => $task->getCurlOptions(),
                             'verify' => $task->getVerify(),
                             'json' => $task->getJson()?:null,
+                            'allow_redirects' => [
+                                'track_redirects' => true
+                            ]
                         ]);
 
                         $promises[$key] = $promise;
@@ -481,6 +483,9 @@ class BaseParser
                             'cookies' => $task->getCookies(),
                             'curl' => $task->getCurlOptions(),
                             'verify' => $task->getVerify(),
+                            'allow_redirects' => [
+                                'track_redirects' => true
+                            ]
                         ]);
 
                         $this->addMessage("POST " . $task->getUrl(), 'level7');
@@ -496,6 +501,8 @@ class BaseParser
 
             $results = [];
 
+            $this->addMessage('Starting total ' . count($promises) . ' downloads.', 'level7');
+
             foreach ($promises as $k=>$promise) {
                 $promise->then(
                     function (ResponseInterface $res) use (&$retry_tasks, &$results, $k, &$tasks, &$return_tasks){
@@ -503,7 +510,8 @@ class BaseParser
                         // Чтобы не запускать снова
                         $tasks[$k]->finish();
                         $tasks[$k]->setHtml($res->getBody());
-                        $url = $this->effectiveYrlMiddleware->getLastRequest()->getUri()->__toString();
+
+                        $url = explode(',',$res->getHeaderLine('X-Guzzle-Redirect-History'))[0];
                         $tasks[$k]->setEffectiveUrl($url);
 
                         $return_task = $tasks[$k];
@@ -511,7 +519,7 @@ class BaseParser
                         $this->addMessage($return_task->getUrl() . ' ! - ' . $return_task->getCallback());
                         //$this->addMessage(memory_get_usage(), 'level7');
                     },
-                    function (RequestException $e) use (&$retry_tasks, &$results, $k, &$tasks, $num_retries){
+                    function (\Exception $e) use (&$retry_tasks, &$results, $k, &$tasks, $num_retries, &$return_tasks){
 
                         $this->addMessage('Ошибка: ' . $e->getMessage() . ' ' . $tasks[$k]->getRetry() . ' ' . $tasks[$k]->getProxyString());
                         // TODO retry с новым прокси
@@ -541,15 +549,16 @@ class BaseParser
                         } else {
                             $retry_task->fail();
                             $this->addMessage('Пропускаем: количество попыток закончилось для url:' . $retry_task->getUrl());
+                            $return_tasks[] = $retry_task;
                         }
                     }
                 );
             }
 
             $promise = \GuzzleHttp\Promise\each_limit($promises, $concurrency, function(\GuzzleHttp\Psr7\Response $value, $idx){
-                //$this->addMessage('ok ' . $idx . ' ' . print_r($value->getStatusCode(),1));
+                $this->addMessage('ok ' . $idx . ' ' . print_r($value->getStatusCode(),1), 'level7');
             }, function($value, $idx) {
-                //$this->addMessage('fail ' . $idx. ' ' . print_r($value->getStatusCode(),1));
+                $this->addMessage('fail ' . $idx. ' ' . print_r($value->getMessage(),1), 'level7');
             });
             try {
                 $promise->wait();
@@ -564,7 +573,8 @@ class BaseParser
         $this->addMessage('time: ' . (microtime(true)-$start), 'debug');
 
 
-        return $return_tasks;
+        return $return_tasks;  // Возвращаем и неудачные попытки также
+        //return ['success'=>$return_tasks, 'fail' => $fail_tasks];
         //Возвращаем массив html страниц
     }
 
@@ -583,12 +593,12 @@ class BaseParser
             'method'    => 'post',
             'key'       => $apikey,
             'file'      => $file,
-            'phrase'	=> $is_phrase,
-            'regsense'	=> $is_regsense,
-            'numeric'	=> $is_numeric,
-            'min_len'	=> $min_len,
-            'max_len'	=> $max_len,
-            'language'	=> $language
+            'phrase'    => $is_phrase,
+            'regsense'  => $is_regsense,
+            'numeric'   => $is_numeric,
+            'min_len'   => $min_len,
+            'max_len'   => $max_len,
+            'language'  => $language
         );
 
         $ch = curl_init();
@@ -626,7 +636,13 @@ class BaseParser
             }
             sleep($rtimeout);
             while(true) {
-                $result = file_get_contents("http://$domain/res.php?key=".$apikey.'&action=get&id='.$captcha_id);
+
+                try {
+                    $result = file_get_contents("http://$domain/res.php?key=".$apikey.'&action=get&id='.$captcha_id);
+                } catch (\Exception $e) {
+                    $result = 'ERROR: ' . $e->getMessage();
+                }
+
                 if (strpos($result, 'ERROR')!==false) {
                     if ($is_verbose) {
                         $this->addMessage($domain.': ' . "server returned error: $result");
@@ -688,11 +704,40 @@ class BaseParser
                             return $response;
                         }
 
+
+
+                        $charset = '';
+
+                        foreach ($headers['Content-Type'] as $values) {
+
+                            $vals = explode('; ', $values);
+                            foreach ($vals as $val) {
+                                if (preg_match('/charset=(.*)/is', $val, $m)) {
+                                    //print_r($m);
+                                    $charset = $m[1];
+                                }
+                            }
+                        }
+
+
+
                         foreach ($headers as $name=>$values) {
                             $headers[$name] = implode("; ", $values);
                         }
 
                         $content = $stream->__toString();
+
+                        if (preg_match('#<META(.*?)charset=\s*[\'\"]{0,1}([^\'\"\s/>]*)[\'\"]{0,1}(.*?)>#is', $content, $m)) {
+                            if (in_array($charset, mb_list_encodings())) {
+                                $aliases = mb_encoding_aliases($charset);
+                                if (!in_array($m[2], $aliases)) {
+                                    if (in_array($m[2], mb_list_encodings())) {
+                                        $content = iconv($m[2],'UTF-8', $content);
+                                    }
+                                }
+                            }
+                        }
+
                         $content = preg_replace('#<meta(.*?)>#is', '', $content);
 
                         $converter = new EncodingConverter('utf-8');
